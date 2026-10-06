@@ -354,3 +354,14 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 .DS_Store
+
+# Local secrets and environment files (never commit client secrets)
+.env
+.env.*
+*.local.json
+appsettings.Local.json
+appsettings.Development.local.json
+secrets.json
+*.pfx
+*.pem
+*.key

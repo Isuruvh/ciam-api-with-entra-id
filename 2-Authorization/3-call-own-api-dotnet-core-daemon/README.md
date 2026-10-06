@@ -213,58 +213,57 @@ Open the project in your IDE (like Visual Studio or Visual Studio Code) to confi
 
 ### Step 4: Running the sample
 
-From your shell or command line, execute the following commands:
+The client needs the API to be running first, and reads its client secret from the `AZURE_CLIENT_SECRET` environment variable (the secret is never stored in `appsettings.json`).
 
-```console
-    cd 2-Authorization\3-call-own-api-dotnet-core-daemon\ToDoListClient
-    dotnet run
-```
-
-Then, open a separate command terminal and run:
+1. Start the API. It listens on `http://localhost:5094` (and `https://localhost:44351`):
 
 ```console
     cd 2-Authorization\3-call-own-api-dotnet-core-daemon\ToDoListAPI
+    dotnet run --launch-profile TodoListAPI
+```
+
+2. In a separate terminal, set the secret and start the client:
+
+```powershell
+    cd 2-Authorization\3-call-own-api-dotnet-core-daemon\ToDoListClient
+    $env:AZURE_CLIENT_SECRET = "<client secret>"
     dotnet run
 ```
 
+> :information_source: The `ToDoListAPI\TodoListApi` subfolder is an unrelated "Hello World" web app that is excluded from the API build. If `http://localhost:5094` shows `Hello World!`, a stale instance of it is holding the port; stop it and start `ToDoListAPI` again.
+
+The configuration values used by this sample are:
+
+| File | Setting | Value |
+|------|---------|-------|
+| `ToDoListClient\appsettings.json` | `AzureAd:Authority` | `https://<tenant-subdomain>.ciamlogin.com/<tenant-id>` |
+| `ToDoListClient\appsettings.json` | `AzureAd:ClientId` | Application (client) ID of the app registration |
+| `ToDoListClient\appsettings.json` | `DownstreamApi:BaseUrl` | `http://localhost:5094/` |
+| `ToDoListClient\appsettings.json` | `DownstreamApi:Scopes` | `api://<application-id>/.default` |
+| `ToDoListAPI\appsettings.json` | `AzureAd:Instance` | `https://<tenant-subdomain>.ciamlogin.com/` |
+| `ToDoListAPI\appsettings.json` | `AzureAd:TenantId` / `ClientId` | Tenant ID and application (client) ID |
+
+The app registration must define the **application** roles `ToDoList.Read.All` and `ToDoList.ReadWrite.All`, have them added under **API permissions** with admin consent granted, and expose the Application ID URI `api://<application-id>`.
+
 ## Explore the sample
 
-This is a very simple sample showing how to perform basic create, read, update and delete operations agains an API protected with MSAL and Azure AD.
+This sample shows a daemon app calling an API protected with MSAL and Microsoft Entra External ID using its own (app-only) identity.
 
-If you configured the sample correctly, running the sample with `dotnet run` should produce the following output in your terminal:
+If you configured the sample correctly, running the client with `dotnet run` acquires an app-only access token, calls `GET /api/todolist` on the API and should produce output like this (the access token itself is never printed):
 
 ```console
-Posting a to-do...
-Retrieving to-do's from server...
-To-do data:
-ID: 1
-User ID: aaaaaaaa-0000-1111-2222-bbbbbbbbbbbb
-Message: Bake bread
-Posting a second to-do...
-Retrieving to-do's from server...
-To-do data:
-ID: 1
-User ID: aaaaaaaa-0000-1111-2222-bbbbbbbbbbbb
-Message: Bake bread
-ID: 2
-User ID: bbbbbbbb-1111-2222-3333-cccccccccccc
-Message: Butter bread
-Deleting a to-do...
-Retrieving to-do's from server...
-To-do data:
-ID: 2
-User ID: bbbbbbbb-1111-2222-3333-cccccccccccc
-Message: Butter bread
-Editing a to-do...
-Retrieving to-do's from server...
-To-do data:
-ID: 2
-User ID: bbbbbbbb-1111-2222-3333-cccccccccccc
-Message: Eat bread
-Deleting remaining to-do...
-Retrieving to-do's from server...
-There are no to-do's in server
+Token aud: <application-id>
+Token iss: https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0
+Token tid: <tenant-id>
+Token ver: 2.0
+Token roles: ["ToDoList.Read.All","ToDoList.ReadWrite.All"]
+Your response is: OK
+[]
 ```
+
+The trailing `[]` is the JSON list of to-dos, which is empty because the API uses an in-memory store.
+
+The `Token ...` lines show the claims the API validates. If the response is `Unauthorized`, see [Troubleshooting](#troubleshooting).
 
 > :information_source: Did the sample not work for you as expected? Then please reach out to us using the [GitHub Issues](../../../../issues) page.
 
@@ -277,6 +276,15 @@ Were we successful in addressing your learning objective? Consider taking a mome
 <details>
 	<summary>Expand for troubleshooting info</summary>
 
+| Symptom | Cause and fix |
+|---------|---------------|
+| `http://localhost:5094` shows `Hello World!` | A stale instance of the unrelated `ToDoListAPI\TodoListApi` app holds the port. Stop it and run `ToDoListAPI` again. |
+| `Your response is: Unauthorized` with `WWW-Authenticate: Bearer error="invalid_token"` | The API rejected the token. The API console prints a `Challenge:` line with the reason. |
+| `IDW10201: Neither scope nor roles claim was found in the bearer token` | The token has no `roles` claim. Define the `ToDoList.Read.All` / `ToDoList.ReadWrite.All` **application** roles on the app registration, add them under **API permissions** and grant admin consent. Microsoft Graph permissions do not apply to this API. |
+| Audience or issuer validation errors | The client `Authority`, `ClientId` and scope, and the API `Instance`, `TenantId` and `ClientId`, must all refer to the same external tenant and app registration. |
+| `Set the AZURE_CLIENT_SECRET environment variable.` | Set the variable in the terminal that runs the client. Create a secret in the app registration; never commit it. |
+| `Forbidden` | The token has roles, but not one the endpoint requires (`ToDoList.Read.All` or `ToDoList.ReadWrite.All`). |
+
 ASP.NET core applications create session cookies that represent the identity of the caller. Some Safari users using iOS 12 had issues which are described in ASP.NET Core #4467 and the Web kit bugs database Bug 188165 - iOS 12 Safari breaks ASP.NET Core 2.1 OIDC authentication.
 
 If your web site needs to be accessed from users using iOS 12, you probably want to disable the SameSite protection, but also ensure that state changes are protected with CSRF anti-forgery mechanism. See the how to fix section of Microsoft Security Advisory: iOS12 breaks social, WSFed and OIDC logins #4647
@@ -286,51 +294,27 @@ To provide feedback on or suggest features for Azure Active Directory, visit [Us
 
 ## About the code
 
-The client portion of this application is managed in the `ToDoListClient\Program.cs` file. Within the first few lines of the file you can see an API client created for you based on the configurations held within the few lines of the file.
+**Client** (`ToDoListClient\Program.cs`): reads the `AzureAd` and `DownstreamApi` settings from `appsettings.json` and the secret from `AZURE_CLIENT_SECRET`, then uses MSAL's `ConfidentialClientApplication` to acquire an app-only token with the client credentials flow and calls the API with it.
 
 ```csharp
-const string ServiceName = "ToDoApi";
+var app = ConfidentialClientApplicationBuilder
+    .Create(clientId)
+    .WithAuthority(authority)
+    .WithClientSecret(clientSecret)
+    .Build();
 
-// Get the Token acquirer factory instance. By default it reads an appsettings.json
-// file if it exists in the same folder as the app (make sure that the 
-// "Copy to Output Directory" property of the appsettings.json file is "Copy if newer").
-var tokenAcquirerFactory = TokenAcquirerFactory.GetDefaultInstance();
+var token = await app.AcquireTokenForClient(scopes).ExecuteAsync();
 
-// Configure the application options to be read from the configuration
-// and add the services you need (Graph, token cache)
-tokenAcquirerFactory.Services.AddDownstreamApi(ServiceName,
-    tokenAcquirerFactory.Configuration.GetSection("ToDoApi"));
+client.DefaultRequestHeaders.Authorization =
+    new AuthenticationHeaderValue("Bearer", token.AccessToken);
 
-// By default, you get an in-memory token cache.
-// For more token cache serialization options, see https://aka.ms/msal-net-token-cache-serialization
-
-// Resolve the dependency injection.
-var serviceProvider = tokenAcquirerFactory.Build();
-
-
-var toDoApiClient = serviceProvider.GetRequiredService<IDownstreamApi>();
+using var response = await client.GetAsync(requestUri);
+Console.WriteLine("Your response is: " + response.StatusCode);
 ```
 
-The `toDoApiClient` is already loaded with an in-memory cache for tokens and the configurations held within the `ToDoListClient\appsettings.json` file and the client credentials stored within that same file to immediately make calls to the `ToDoListAPI`.
+The `.default` scope (`api://<application-id>/.default`) requests all application permissions granted to the client, which are returned in the token's `roles` claim.
 
-The client can also make requests using the credentials out of the box for requests like **GET**, **POST** and **DELETE**. You can see examples of this throughout the code that can also deserialize JSON from request responses into C# objects with no further configuration.
-
-For example:
-
-```csharp
-var firstNewToDo = await toDoApiClient.PostForAppAsync<ToDo, ToDo>(
-            ServiceName,
-            new ToDo()
-            {
-                UserId = Guid.NewGuid(),
-                Message = "Bake bread"
-            });
-```
-
-Please bare in mind that the `UserId` in this sample is generated for the sake of demonstration. In actual scenarios you would want to use the actual [Object ID](https://learn.microsoft.com/partner-center/find-ids-and-domain-names#find-the-user-object-id) of user's if you wanted a key to reference them.
-
-For further reading see the `IDownsIDownstreamApi` documentaiton [here](https://learn.microsoft.com/dotnet/api/microsoft.identity.abstractions.idownstreamapi?view=msal-model-dotnet-latest).
-
+**API** (`ToDoListAPI\Program.cs`): validates incoming JWTs with `Microsoft.Identity.Web` (`AddMicrosoftIdentityWebApi`), configured from the `AzureAd` section of `appsettings.json`. `ToDoListController` authorizes each endpoint with `[RequiredScopeOrAppPermission]`, which accepts either delegated scopes (`scp`) or application permissions (`roles`) such as `ToDoList.Read.All`. In Development it also logs token validation failures and challenge reasons to the console to help diagnose `401` responses, and it does not redirect HTTP to HTTPS.
 ## How to deploy this sample to Azure
 
 <details>

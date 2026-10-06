@@ -5,18 +5,38 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Identity.Web;
+using System;
+using System.Threading.Tasks;
 
 using ToDoListAPI.Context;
 
+
+
+public partial class Program
+{
+    public static void Main(string[] args)
+    {
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddHttpContextAccessor();
+//builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddMicrosoftIdentityWebApi(options =>
             {
                 builder.Configuration.Bind("AzureAd", options);
-                options.Events = new JwtBearerEvents();
+                options.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = context =>
+                    {
+                        Console.WriteLine("Token validation failed: " + context.Exception.Message);
+                        return Task.CompletedTask;
+                    },
+                    OnChallenge = context =>
+                    {
+                        Console.WriteLine($"Challenge: {context.Request.Method} {context.Request.Path} error={context.Error} desc={context.ErrorDescription} failure={context.AuthenticateFailure?.Message}");
+                        return Task.CompletedTask;
+                    }
+                };
 
                 /// <summary>
                 /// Below you can do extended token validation and check for additional claims, such as:
@@ -77,7 +97,10 @@ else
 }
 
 app.UseCors("default");
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseRouting();
 app.UseAuthentication();
@@ -86,3 +109,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+    }
+}
