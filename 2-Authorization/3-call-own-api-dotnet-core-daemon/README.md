@@ -232,6 +232,8 @@ The client needs the API to be running first, and reads its client secret from t
 
 > :information_source: The `ToDoListAPI\TodoListApi` subfolder is an unrelated "Hello World" web app that is excluded from the API build. If `http://localhost:5094` shows `Hello World!`, a stale instance of it is holding the port; stop it and start `ToDoListAPI` again.
 
+> :warning: **Placeholders:** the `appsettings.json` files in this repository contain placeholders (`Enter_the_Tenant_Subdomain_Here`, `Enter_the_Tenant_Id_Here`, `Enter_the_Application_Id_Here`) instead of real tenant and application IDs. Replace them with your own values before running. Do not commit your real values or any client secret; the secret is supplied only through the `AZURE_CLIENT_SECRET` environment variable.
+
 The configuration values used by this sample are:
 
 | File | Setting | Value |
